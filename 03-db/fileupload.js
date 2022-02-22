@@ -1,7 +1,10 @@
 const express = require('express');
 const app = express();
 const multer = require('multer');
+const morgan = require('morgan');
 
+// app.use( morgan('combined'));
+app.use( morgan('short'));
 app.use( express.static('static') );
 
 /*
