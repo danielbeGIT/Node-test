@@ -3,6 +3,7 @@
  */
 
  const debug = require('debug')('books:user_controller');
+ const { matchedData, validationResult } = require('express-validator');
  const models = require('../models');
  
  /**
@@ -44,15 +45,19 @@
   * POST /
   */
  const store = async (req, res) => {
-     const data = {
-         username: req.body.username,
-         password: req.body.password,
-         first_name: req.body.first_name,
-         last_name: req.body.last_name,
-     };
+     // check for any validation errors
+     const errors = validationResult(req);
+     if (!errors.isEmpty()) {
+         return res.status(422).send({ status: 'fail', data: errors.array() });
+     }
+ 
+     // get only the validated data from the request
+     const validData = matchedData(req);
+ 
+     console.log("The validated data:", validData);
  
      try {
-         const user = await new models.User(data).save();
+         const user = await new models.User(validData).save();
          debug("Created new user successfully: %O", user);
  
          res.send({
@@ -90,25 +95,17 @@
          return;
      }
  
-     const data = {};
- 
-     // update password if part of the request
-     if (req.body.password) {
-         data.password = req.body.password;
+     // check for any validation errors
+     const errors = validationResult(req);
+     if (!errors.isEmpty()) {
+         return res.status(422).send({ status: 'fail', data: errors.array() });
      }
  
-     // update first_name if part of the request
-     if (req.body.first_name) {
-         data.first_name = req.body.first_name;
-     }
- 
-     // update last_name if part of the request
-     if (req.body.last_name) {
-         data.last_name = req.body.last_name;
-     }
+     // get only the validated data from the request
+     const validData = matchedData(req);
  
      try {
-         const updatedUser = await user.save(data);
+         const updatedUser = await user.save(validData);
          debug("Updated user successfully: %O", updatedUser);
  
          res.send({
