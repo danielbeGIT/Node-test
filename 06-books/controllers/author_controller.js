@@ -77,7 +77,7 @@
  /**
   * Update a specific resource
   *
-  * POST /:authorId
+  * PUT /:authorId
   */
  const update = async (req, res) => {
      const authorId = req.params.authorId;

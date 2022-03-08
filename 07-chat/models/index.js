@@ -2,21 +2,20 @@
 const knex = require('knex')({
 	debug: true,
 	client: 'mysql',
-	connection: process.env.CLEARDB_DATABASE_URL || {
+	connection: {
 		host: process.env.DB_HOST || 'localhost',
 		port: process.env.DB_PORT || 3306,
-		user: process.env.DB_USER || 'library',
+		charset: process.env.DB_CHARSET || 'utf8mb4',
+		database: process.env.DB_NAME || 'boilerplate',
+		user: process.env.DB_USER || 'boilerplate',
 		password: process.env.DB_PASSWORD || '',
-		database: process.env.DB_NAME || 'library',
 	}
 });
 
 const bookshelf = require('bookshelf')(knex);
 
 const models = {};
-models.Author = require('./Author')(bookshelf);
-models.Book = require('./Book')(bookshelf);
-models.User = require('./User')(bookshelf);
+models.Example = require('./Example')(bookshelf);
 
 module.exports = {
 	bookshelf,

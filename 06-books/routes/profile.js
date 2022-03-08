@@ -18,11 +18,9 @@ router.put('/', profileValidationRules.updateRules, profileController.updateProf
  */
 router.get('/books', profileController.getBooks);
 
-
 /**
  * Add a book to the authenticated user
- * 
- * POST /profile/books
+ *
  */
 router.post('/books', profileValidationRules.addBookRules, profileController.addBook);
 

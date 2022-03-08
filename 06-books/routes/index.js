@@ -6,17 +6,21 @@ const userValidationRules = require('../validation/user');
 
 /* GET / */
 router.get('/', (req, res, next) => {
-	res.send({ success: true, data: { msg: 'oh, hi' }});
+	res.send({ success: true, data: { msg: 'look ma, i deployed my app' }});
 });
 
 router.use('/authors', require('./authors'));
-router.use('/books', require('./books'));
-router.use('/profile', auth.basic, require('./profile'));
 
-// OLD Users
-// router.use('/users', require('./users'));
+router.use('/books', require('./books'));
+router.use('/profile', auth.validateJwtToken, require('./profile'));
+
+// login a user and get a JWT token
+router.post('/login', authController.login);
+
+// issue a new JWT access token
+router.post('/refresh', authController.refresh);
 
 // register a new user
-router.post('/register', userValidationRules.createRules, authController.register)
+router.post('/register', userValidationRules.createRules, authController.register);
 
 module.exports = router;
