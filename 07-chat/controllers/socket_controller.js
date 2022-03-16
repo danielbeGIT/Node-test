@@ -3,30 +3,30 @@
  */
 
 const debug = require('debug')('chat:socket_controller');
+const models = require('../models');
 
-let io = null;	//	socket.io server instance
+let io = null; // socket.io server instance
 // let socket = null;	//	socket to the client, this will overwrite all/global socket
 
 // list of rooms and their connected users
+const users = {}
 const rooms = [
 	{
 		id: 'general',
 		name: 'General',
-		users: {}
+		users: {},
 	},
 	{
 		id: 'major',
 		name: 'Major',
-		users: {}
+		users: {},
 	},
 	{
-		id: 'sergeant',
-		name: 'Sergeant',
-		users: {}
-	}
+		id: 'sergant',
+		name: 'Sergant',
+		users: {},
+	},
 ];
-
-// const users = {};
 
 const handleDisconnect = function() {
 	debug(`Client ${this.id} disconnected :(`);
@@ -39,45 +39,63 @@ const handleDisconnect = function() {
 		return;
 	}
 
-	// let everyone in the room know that someone has disconnected
-	this.broadcast.to(room.id).emit('user:disconnected', users[this.id]);
+	// let everyone in the room know that this user has disconnected
+	this.broadcast.to(room.id).emit('user:disconnected', room.users[this.id]);
 
-	// remove user from list of connected users
+	// remove user from list of users in that room
 	delete room.users[this.id];
+
+	// broadcast list of users in room to all connected sockets EXCEPT ourselves
+	this.broadcast.to(room.id).emit('user:list', room.users);
 }
 
 // Handle when a user has joined the chat
-const handleUserJoined = function(username, room_id, callback) {
-	// associate socket id with username
-	// users[this.id] = username;
-
-	debug(`User ${username} with socket id ${this.id} wants to join room ${room_id}`);
+const handleUserJoined = async function(username, room_id, callback) {
+	debug(`User ${username} with socket id ${this.id} wants to join room '${room_id}'`);
 
 	// join room
 	this.join(room_id);
 
 	// add socket to list of online users in this room
-	// a) find room object with 'id' === 'general'
-	const room = rooms.find(chatroom => chatroom.id === room_id);
+	// a) find room object with `id` === `general`
+	const room = rooms.find(chatroom => chatroom.id === room_id)
 
-	// b) add socket to room's 'users' object
+	// b) add socket to room's `users` object
 	room.users[this.id] = username;
 
-	// let everyone in the room know that someone has connected
+	// let everyone know that someone has connected to the chat
 	this.broadcast.to(room.id).emit('user:connected', username);
+
+	// one hour ago
+	const one_hour_ago = Date.now() - (1000 * 60 * 60)
+
+	// get all messages from the database
+	const messages = await models.Message
+		// .find({ room: room.id })
+		.where('room').equals(room.id) // same as the above `.find`-line
+		.where('timestamp').gte(one_hour_ago); // you can chain `.where` and they work as AND
 
 	// confirm join
 	callback({
 		success: true,
-		// users: rooms.users
+		roomName: room.name,
+		messages,
+		users: room.users
 	});
+
+	// broadcast list of users in room to all connected sockets EXCEPT ourselves
+	this.broadcast.to(room.id).emit('user:list', room.users);
 }
 
-const handleChatMessage = function(message) {
-	debug('Someone said something: ', message);
+const handleChatMessage = async function(data) {
+	debug('Someone said something: ', data);
 
 	// emit `chat:message` event to everyone EXCEPT the sender
-	this.broadcast.to(message.room).emit('chat:message', message);
+	this.broadcast.to(data.room).emit('chat:message', data);
+
+	// save message in database
+	const message = new models.Message(data);
+	await message.save();
 }
 
 module.exports = function(socket, _io) {
@@ -97,3 +115,4 @@ module.exports = function(socket, _io) {
 	// handle user emitting a new message
 	socket.on('chat:message', handleChatMessage);
 };
+

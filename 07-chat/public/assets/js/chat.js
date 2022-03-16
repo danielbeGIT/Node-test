@@ -46,6 +46,12 @@ const addNoticeToChat = notice => {
 	liEl.scrollIntoView();
 }
 
+// update user list
+const updateUserList = users => {
+	document.querySelector('#online-users').innerHTML =
+		Object.values(users).map(username => `<li><span class="fa-solid fa-user-astronaut"></span> ${username}</li>`).join("");
+}
+
 // listen for when a new user connects
 socket.on('user:connected', (username) => {
 	addNoticeToChat(`${username} connected 🥳`);
@@ -54,6 +60,30 @@ socket.on('user:connected', (username) => {
 // listen for when a user disconnects
 socket.on('user:disconnected', (username) => {
 	addNoticeToChat(`${username} disconnected 😢`);
+});
+
+// listen for when we receive an updated list of online users (in this room)
+socket.on('user:list', users => {
+	updateUserList(users);
+})
+
+// listen for when we're disconnected
+socket.on('disconnect', (reason) => {
+	if (reason === 'io server disconnect') {
+		// reconnect to the server
+		socket.connect();
+	}
+	addNoticeToChat(`You were disconnected. Reason: ${reason} 😳`);
+});
+
+// listen for when we're reconnected
+socket.io.on('reconnect', () => {
+	// join room? but only if we were in the chat previously
+	if (username) {
+		socket.emit('user:joined', username, room, (status) => {
+			addNoticeToChat(`You reconnected 🥳`);
+		});
+	}
 });
 
 // listen for incoming messages
@@ -70,7 +100,7 @@ usernameForm.addEventListener('submit', e => {
 	room = usernameForm.room.value;
 	username = usernameForm.username.value;
 
-	console.log(`User ${username} wants to join room ${room}`)
+	console.log(`User ${username} wants to join room '${room}'`);
 
 	// emit `user:joined` event and when we get acknowledgement, THEN show the chat
 	socket.emit('user:joined', username, room, (status) => {
@@ -78,6 +108,12 @@ usernameForm.addEventListener('submit', e => {
 		console.log("Server acknowledged that user joined", status);
 
 		if (status.success) {
+			// render message history
+			status.messages.forEach(message => {
+				const ownMsg = message.username === username;
+				addMessageToChat(message, ownMsg);
+			});
+
 			// hide start view
 			startEl.classList.add('hide');
 
@@ -85,10 +121,13 @@ usernameForm.addEventListener('submit', e => {
 			chatWrapperEl.classList.remove('hide');
 
 			// set room name as chat title
-			document.querySelector('#chat-title').innerText = room;
+			document.querySelector('#chat-title').innerText = status.roomName;
 
 			// focus on inputMessage
 			messageEl.focus();
+
+			// update list of users in room
+			updateUserList(status.users);
 		}
 	});
 });
