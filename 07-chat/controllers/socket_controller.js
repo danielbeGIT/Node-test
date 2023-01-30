@@ -6,33 +6,52 @@ const debug = require('debug')('chat:socket_controller');
 const models = require('../models');
 
 let io = null; // socket.io server instance
-// let socket = null;	//	socket to the client, this will overwrite all/global socket
 
 // list of rooms and their connected users
 const users = {}
-const rooms = [
-	{
-		id: 'general',
-		name: 'General',
-		users: {},
-	},
-	{
-		id: 'major',
-		name: 'Major',
-		users: {},
-	},
-	{
-		id: 'sergant',
-		name: 'Sergant',
-		users: {},
-	},
-];
+const rooms = [];
+
+/**
+ * Get rooms from database
+ */
+const getRooms = async () => {
+	const res = await models.Room.find();
+	res.forEach(room => {
+		rooms.push({
+			id: room._id.toString(),
+			name: room.name,
+			users: {},
+		});
+	})
+	console.log(rooms);
+}
+getRooms();
+
+/**
+ * Get room by ID
+ *
+ * @param {String} id ID of Room to get
+ * @returns
+ */
+const getRoomById = id => {
+	return rooms.find(room => room.id === id)
+}
+
+/**
+ * Get room by User ID
+ *
+ * @param {String} id Socket ID of User to get Room by
+ * @returns
+ */
+const getRoomByUserId = id => {
+	return rooms.find(chatroom => chatroom.users.hasOwnProperty(id));
+}
 
 const handleDisconnect = function() {
 	debug(`Client ${this.id} disconnected :(`);
 
 	// find the room that this socket is part of
-	const room = rooms.find(chatroom => chatroom.users.hasOwnProperty(this.id));
+	const room = getRoomByUserId(this.id);
 
 	// if socket was not in a room, don't broadcast disconnect
 	if (!room) {
@@ -58,7 +77,7 @@ const handleUserJoined = async function(username, room_id, callback) {
 
 	// add socket to list of online users in this room
 	// a) find room object with `id` === `general`
-	const room = rooms.find(chatroom => chatroom.id === room_id)
+	const room = getRoomById(room_id);
 
 	// b) add socket to room's `users` object
 	room.users[this.id] = username;
@@ -87,24 +106,47 @@ const handleUserJoined = async function(username, room_id, callback) {
 	this.broadcast.to(room.id).emit('user:list', room.users);
 }
 
+const handleGetRoomList = function(callback) {
+	// generate a list of rooms with only their id and name
+	const room_list = rooms.map(room => {
+		return {
+			id: room.id,
+			name: room.name,
+		}
+	});
+
+	// send list of rooms back to the client
+	setTimeout(() => {
+		callback(room_list);
+	}, 1500);
+}
+
 const handleChatMessage = async function(data) {
 	debug('Someone said something: ', data);
 
+	const room = getRoomById(data.room);
+
 	// emit `chat:message` event to everyone EXCEPT the sender
-	this.broadcast.to(data.room).emit('chat:message', data);
+	this.broadcast.to(room.id).emit('chat:message', data);
 
 	// save message in database
-	const message = new models.Message(data);
-	await message.save();
+	try {
+		const message = new models.Message({
+			...data,
+			users: Object.values(room.users),
+		});
+		await message.save();
+	} catch (e) {
+		debug("Could not save message in the database.", data);
+		this.emit('chat:notice', { message: "Could not save your message in the database." });
+	}
 }
 
 module.exports = function(socket, _io) {
+	// save a reference to the socket.io server instance
 	io = _io;
-	// socket = _socket;	//	this will overwrite all/global socket
 
 	debug('a new client has connected', socket.id);
-
-	io.emit("new-connection", "A new user connected");
 
 	// handle user disconnect
 	socket.on('disconnect', handleDisconnect);
@@ -112,7 +154,9 @@ module.exports = function(socket, _io) {
 	// handle user joined
 	socket.on('user:joined', handleUserJoined);
 
+	// handle get room list request
+	socket.on('get-room-list', handleGetRoomList);
+
 	// handle user emitting a new message
 	socket.on('chat:message', handleChatMessage);
-};
-
+}
